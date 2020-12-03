@@ -1,0 +1,156 @@
+---
+title: "Growth_Curve"
+author: "ikang"
+date: '2020 12 3 '
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Drawing growth curves using R
+
+First, you have to set working directory, and then load packages "openxlsx" and "tidyverse".
+
+```{r, message = FALSE}
+setwd("D:/Kin/Protocols/R/R_GrowthCurve2/R_GrowthCurve")
+library(openxlsx)
+library(tidyverse)
+```
+
+## Growth curve without error bars (single tube per each strain)
+
+First, read and save the data from a specific sheet of Excel file.
+```{r}
+single <- read.xlsx("Growth.xlsx", sheet="Single")
+```
+
+Then, transform the data into tidy form.
+```{r}
+single.tidy <- gather(data=single, key=Days, value = Density, -Strain)
+```
+
+You can read and transform together by piping with "%>%".  
+If you use piping, the output of the previous command is automatically the input of the next command.
+```{r}
+single.tidy <- read.xlsx("Growth.xlsx", sheet="Single") %>%
+  gather(key=Days, value = Density, -Strain)
+```
+
+Now, plot the data.
+```{r}
+ggplot(single.tidy, aes(x=Days, y=Density, group=Strain, colour=Strain)) +
+  geom_line(size=1) + geom_point(size=4)
+```
+
+Y-axis of growth curvers usually follows log scale.
+```{r}
+ggplot(single.tidy, aes(x=Days, y=Density, group=Strain, colour=Strain)) +
+  geom_line(size=1) + geom_point(size=4) + 
+  scale_y_log10()
+```
+
+"Facet" : One plot for one strain
+```{r}
+ggplot(single.tidy, aes(x=Days, y=Density, group=Strain, color=Strain)) +
+  geom_line(size=1) + geom_point(size=4) + 
+  scale_y_log10() +
+  facet_wrap(~Strain)
+```
+
+
+## Growth curve with error bars (triplicate per each strain)
+Read the data and make tidy.
+```{r}
+triple <- read.xlsx("Growth.xlsx", sheet="Triplicate")
+triple <- gather(data=triple, key=Days, value = Density, -Strain, -Flask)
+```
+
+Grouping the data by Strain AND Days: In this case, 3 flasks are grouped per each strain per each day.
+```{r}
+triple.gr <- group_by(triple, Strain, Days)
+```
+
+Check the result of "grouping".
+```{r}
+triple.gr
+```
+
+Calculate and save summary stats based on the grouping (i.e. per each strain per each day)
+```{r}
+triple.sum <- summarise(triple.gr, repli=n(), avg=mean(Density), sd=sd(Density))
+```
+In the above,
+number of replicates -> saved into 'repli' column
+mean -> saved into 'avg' column
+sd (standard deviation) -> saved into 'sd' column
+
+All the above steps can be piped as below.
+```{r}
+triple.sum <- read.xlsx("Growth.xlsx", sheet="Triplicate") %>%
+  gather(key=Days, value = Density, -Strain, -Flask, convert=T) %>%
+  group_by(Strain, Days) %>%
+  summarise(repli=n(), avg=mean(Density), sd=sd(Density), se=sd(Density)/sqrt(repli))
+```
+
+Check the result.
+```{r}
+triple.sum
+```
+
+Plot the result.
+First, without error bar
+```{r}
+ggplot(triple.sum, aes(x=Days, y=avg, group=Strain, colour=Strain)) +
+  geom_line(size=1) + geom_point(size=4) + 
+  scale_y_log10() + 
+  scale_x_continuous(breaks=seq(0,10,by=1))
+```
+
+Then, with error bar
+```{r}
+ggplot(triple.sum, aes(x=Days, y=avg, group=Strain, colour=Strain)) +
+  geom_line(size=1) + geom_point(size=4) + 
+  scale_y_log10() +
+  geom_errorbar(aes(ymin=avg-sd, ymax=avg+sd), width=0.1, size=0.5)
+```
+
+Refine the Y-axis label
+```{r}
+ggplot(triple.sum, aes(x=Days, y=avg, group=Strain, colour=Strain)) +
+  geom_line(size=1) + geom_point(size=4) + 
+  scale_y_log10() +
+  geom_errorbar(aes(ymin=avg-sd, ymax=avg+sd), width=0.1, size=0.5) +
+  ylab('Cells '~mL^-1)
+```
+
+Facet the graph
+```{r}
+ggplot(triple.sum, aes(x=Days, y=avg, group=Strain, color=Strain)) +
+  geom_line(size=1) + geom_point(size=4) + 
+  scale_y_log10() +
+  geom_errorbar(aes(ymin=avg-sd, ymax=avg+sd), width=0.1, size=0.5) +
+  ylab('Cells '~mL^-1) +
+  facet_wrap(~Strain)
+```
+
+Use error ribbon instead of error bar.
+```{r}
+ggplot(triple.sum, aes(x=Days, y=avg, group=Strain, color=Strain)) +
+  geom_line(size=1) + geom_point(size=4) + 
+  scale_y_log10() +
+  geom_ribbon(aes(ymin = avg-sd, ymax = avg+sd, fill=Strain), alpha=0.3, linetype=0) +
+  ylab('Cells '~mL^-1)
+```
+
+Facet with both error bar and error ribbon
+```{r}
+ggplot(triple.sum, aes(x=Days, y=avg, group=Strain, color=Strain)) +
+  geom_line(size=1) + geom_point(size=4) + 
+  scale_y_log10() +
+  geom_errorbar(aes(ymin=avg-sd, ymax=avg+sd), width=0.1, size=0.5) +
+  geom_ribbon(aes(ymin = avg-sd, ymax = avg+sd, fill=Strain), alpha=0.3, linetype=0) +
+  ylab('Cells '~mL^-1) +
+  facet_wrap(~Strain)
+```
